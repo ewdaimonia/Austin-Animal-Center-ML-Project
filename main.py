@@ -38,36 +38,51 @@ def show_batch(dataset):
         for key, value in batch.items():
             print("{:20s}: {}".format(key, value.numpy()))
 
+# This is the method which creates a model and then calls the make predictions method so the users can see what the prediction for their pet will be
+# This method almost certainly needs to be split into one method that sanitizes the data set, one that creates the model, and one that handles the predictions.
 
-def createModelMixedCatMethod(df):
+
+def createModel(df):
     # This method was created by following the following tf tutorials:
     # https://www.tensorflow.org/tutorials/structured_data/feature_columns + https://www.tensorflow.org/tutorials/load_data/csv
 
     # Set up a dictionary of categorical lists to help with categorical features later
     CATEGORIES = {
-        'Sex_upon_Outcome': ['Intact Male', 'Intact Female', 'Spayed Female', 'Neutered Male', 'Unknown'],
+        # 'Sex_upon_Outcome': ['Intact Male', 'Intact Female', 'Spayed Female', 'Neutered Male', 'Unknown'],
+        'Sex_upon_Outcome': ['Male', 'Female'],
         'Breed': [*df['Breed'].unique()],
         'Color': [*df['Color'].unique()]
     }
-
-    # Code to simplify age to a year value or 0 for under a year
-    # df['Age upon Outcome'] = df['Age upon Outcome'].apply(
-    #     lambda age: 0 if 'year' not in str(age) else(int(age[0]) if age else 0))
 
     # Code to simplify age to a year value or a decimal value for under a year
     df['Age upon Outcome'] = df['Age upon Outcome'].apply(
         lambda age: float(age[0]) if 'year' in str(age) else(float(age[0])/12 if 'month' in str(age) else(float(age[0])/52.1429 if 'week' in str(age) else float(0))))
 
     # Remove entries with outcomes that don't make sense for our model
+    # Also remove incomplete data such as NULL or Unknown entries for sex and age
     df = df[(df['Outcome Type'] != 'Transfer') & (
-        df['Outcome Type'] != 'Return to Owner')]
+        df['Outcome Type'] != 'Return to Owner') & (df['Age upon Outcome'] != 'NULL') & (df['Sex upon Outcome'] != 'Unknown') & (df['Sex upon Outcome'] != 'NULL')]
+
     # Simplify outcomes(target column) to 1 for adopted / lived and 0 for died / euthanized
     df['Outcome Type'] = df['Outcome Type'].map(lambda out: 1 if out in [
         'Rto-Adopt', 'Return to Owner', 'Transfer', 'Adoption'] else 0)
 
+    # Remove neutered / spayed / intact part of gender as it was too great of an indicator of survival.
+    # I highly dislike the if statement in this lambda, but I could not find the source of the error with the dog animal type.
+    # The script kept breaking on a float value which I cannot find in the actual data
+    df['Sex upon Outcome'] = df['Sex upon Outcome'].apply(
+        lambda sex: sex.split()[1] if isinstance(sex, str) else 'Male')
+
     # Drop unecessary columns
     df = df.drop(columns=['Animal ID', 'Name', 'DateTime',
                           'Date of Birth', 'MonthYear', 'Outcome Subtype', 'Animal Type'])
+
+    # These three describe statements are useful because they allow us to see the averages / frequencies / means for the all the adopted vs died / euthanized entries
+    # print(df[df['Outcome Type'] == 1].describe(include='all'))
+    # print(df[df['Outcome Type'] == 0].describe(include='all'))
+    # print(df['Outcome Type'].describe())
+    # input()
+
     # Replace outcome type column with target column
     df['target'] = df.pop('Outcome Type')
     # Replace whitespace with underscores in column names
@@ -108,10 +123,16 @@ def createModelMixedCatMethod(df):
 
     # Use keras sequential to build our model
     model = tf.keras.Sequential([
+        # Add our numerical and categorical layers
         feature_layer,
+        # Been playing around with the units and number of layers to try to build a better model
         layers.Dense(128, activation='relu'),
         layers.Dense(128, activation='relu'),
-        layers.Dropout(.1),
+        layers.Dense(128, activation='relu'),
+        layers.Dense(128, activation='relu'),
+        # layers.Dense(128, activation='relu'),
+        # I don't think dropout will work since we are mostly using categorical data here, setting some values to 0 would only work for the age column
+        # layers.Dropout(.1),
         layers.Dense(1)
     ])
 
@@ -129,6 +150,8 @@ def createModelMixedCatMethod(df):
     test_loss, test_accuracy = model.evaluate(test_ds)
 
     print('\n\nTest Loss {}, Test Accuracy {}'.format(test_loss, test_accuracy))
+    # Save our model for use elsewhere
+    # model.save('aacmlp')
 
     predictions = model.predict(test_ds)
 
@@ -155,62 +178,26 @@ def createModelMixedCatMethod(df):
         print()
         count += 1
 
-# This was an older method I used before implimenting categorical features, I should probably remove it, but I think it's a good example of how you can simplify data to numeric representations
+    makePrediction(model, df)
 
 
-def createModelCatNumsMethod(df):
-    # This method was created by following the following tf tutorials:
-    # https://www.tensorflow.org/tutorials/load_data/pandas_dataframe
-
-    # Create a categorical representation of each gender option
-    df['Sex upon Outcome'] = pd.Categorical(df['Sex upon Outcome'])
-    df['Sex upon Outcome'] = df['Sex upon Outcome'].cat.codes
-    # Change each value in the age column to either 0 if the age is < 1 year and the number of years if the age is > 1
-    df['Age upon Outcome'] = df['Age upon Outcome'].apply(
-        lambda age: 0 if 'year' not in str(age) else(int(age[0]) if age else 0))
-    # Create a categorical representation of each breed option
-    df['Breed'] = pd.Categorical(df['Breed'])
-    df['Breed'] = df['Breed'].cat.codes
-    # Create a categorical representation of each color option
-    df['Color'] = pd.Categorical(df['Color'])
-    df['Color'] = df['Color'].cat.codes
-    # Remove transferred outcome rows and returned to owner as they overly complicate the data and it isn't clear how much the owner's attachment to the pet weighed into picking it up and transferred does not indicate the final outcome
-    df = df[(df['Outcome Type'] != 'Transfer') & (
-        df['Outcome Type'] != 'Return to Owner')]
-    # Simplify each outcome as 1 or 0, where 1 = adopted and 0 = died or euthanized
-    df['Outcome Type'] = df['Outcome Type'].map(lambda out: 1 if out in [
-        'Rto-Adopt', 'Return to Owner', 'Transfer', 'Adoption'] else 0)
-
-    # Separate our target column from the rest of the features in the df
-    target = df.pop('Outcome Type')
-    # Drop all columns that have no bearing on our model
-    df = df.drop(columns=['Animal ID', 'Name', 'DateTime',
-                          'Date of Birth', 'MonthYear', 'Outcome Subtype', 'Animal Type'])
-    # Display the prepared df to create our ML model
-    print(df.head())
-    print(df.dtypes)
-
-    # ML magic, idk, look at the TF docs
-    dataset = tf.data.Dataset.from_tensor_slices((df.values, target.values))
-    for feat, targ in dataset.take(1000):
-        print(f'Features: {feat}, Target: {targ}')
-    train_dataset = dataset.shuffle(len(df)).batch(1)
-
-    def get_compiled_model():
-        model = tf.keras.Sequential([
-            tf.keras.layers.Dense(10, activation='relu'),
-            tf.keras.layers.Dense(10, activation='relu'),
-            tf.keras.layers.Dense(1)
-        ])
-
-        model.compile(optimizer='adam',
-                      loss=tf.keras.losses.BinaryCrossentropy(
-                          from_logits=True),
-                      metrics=['accuracy'])
-        return model
-
-    model = get_compiled_model()
-    model.fit(train_dataset, epochs=3)
+def makePrediction(model, df):
+    #imported = tf.saved_model.load("aacmlp")
+    userPet = []
+    userPet.append(input(
+        "Please enter the age of your animal in years, or decimal values for under a year: "))
+    userPet.append(input(
+        f"{', '.join(map(str, df['Breed'].unique()))}, Please enter the breed of your animal which most closely matches one of the options listed above: "))
+    userPet.append(input(
+        f"{df['Color'].unique()} Please enter the color of your animal which most closely matches one of the options listed above: "))
+    userPet.append(input(
+        "Please enter the gender of your animal [Male or Female]: "))
+    singleDf = pd.DataFrame([{'Age_upon_Outcome': float(userPet[0]), 'Breed': str(userPet[1]),
+                              'Color': str(userPet[2]), 'Sex_upon_Outcome': str(userPet[3]), 'target': float(0)}])
+    singleDs = df_to_dataset(singleDf, batch_size=1)
+    singlePrediction = model.predict(singleDs)
+    singlePrediction = tf.sigmoid(singlePrediction[0]).numpy()
+    print("Predicted survival: {:.2%}".format(singlePrediction[0]))
 
 # This is a method that I'd like to flesh out a bit and add a few more visualiztions for examples of what can be done with data
 
@@ -229,8 +216,12 @@ def createVisualizations(df):
 
 
 def main():
-    # createModelCatNumsMethod(catdf)
-    createModelMixedCatMethod(catdf)
+    userChoice = input(
+        "Please pick one of the animal types to build a model for: [Cat, Dog, Bird, Other] ")
+    if(userChoice in originaldf['Animal Type'].unique()):
+        createModel(originaldf[(originaldf['Animal Type'] == userChoice)])
+    else:
+        print("Your entry did not match any of the choices, goodbye")
     # createVisualizations(catdf)
 
 

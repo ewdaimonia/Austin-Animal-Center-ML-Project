@@ -16,9 +16,11 @@ Please note that I'm still relatively new to the data science world myself and c
 * Add some visualizations
 
 ## Tutorials followed:
-https://www.tensorflow.org/tutorials/structured_data/feature_columns
-https://www.tensorflow.org/tutorials/load_data/csv
-https://www.tensorflow.org/tutorials/load_data/pandas_dataframe
+* https://www.tensorflow.org/tutorials/structured_data/feature_columns
+
+* https://www.tensorflow.org/tutorials/load_data/csv
+
+* https://www.tensorflow.org/tutorials/load_data/pandas_dataframe
 
 ## Data source:
 https://catalog.data.gov/dataset/austin-animal-center-intakes
