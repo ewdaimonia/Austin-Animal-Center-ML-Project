@@ -6,14 +6,17 @@ Please note that I'm still relatively new to the data science world myself and c
 
 ## Current issues
 
-* There is some issue with the data in the dog animal type entries which will not let us create a model for them
-* Is sex upon outcome a good indicator? It may be the only factor which is used because the Austin Animal Center might offer spay and neuter services upon adoption, which would mean an adopted pet would almost always be spayed / neutered and a died / euthanized pet would almost never be. I am considering removing it from the feature column. 
+* ~~There is some issue with the data in the dog animal type entries which will not let us create a model for them~~
+    - This issue has been fixed by returning 'Male' in a lambda function when it encounters the bad float data in the 'Sex upon Outcome' value. I would rather remove the value entirely, but I cannot find it in the xlsx file for the life of me.
+* ~~Is sex upon outcome a good indicator? It may be the only factor which is used because the Austin Animal Center might offer spay and neuter services upon adoption, which would mean an adopted pet would almost always be spayed / neutered and a died / euthanized pet would almost never be. I am considering removing it from the feature column.~~ 
+    - After some deliberation, I decided to remove the intact/neutered subtext from the column. It was too strong an indicator of the outcome type. I'm unsure why exactly almost all fixed animals are adopted and intact animals are euthanized, but I think it's more interesting to examine the other traits. I will reach out to the Austin Animal Care Center and ask if all adopted animals are required to be fixed.
 
 ## Features to add
 
-* User input so users can see a prediction of their animal's survival
-* GUI
-* Add some visualizations
+- [X] User input so users can see a prediction of their animal's survival
+- [ ] Split the createModel method into several smaller functions
+- [ ] GUI
+- [ ] Add some visualizations, maybe one that plots predicted survival over age
 
 ## Tutorials followed:
 * https://www.tensorflow.org/tutorials/structured_data/feature_columns
