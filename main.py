@@ -8,13 +8,7 @@ from tensorflow.keras import layers
 import matplotlib.pyplot as plt
 plt.style.use('seaborn-whitegrid')
 
-originaldf = pd.read_csv('Copy of Austin_Animal_Center_Outcomes.csv')
-
-# Split the dataset into different animal types
-catdf = originaldf[(originaldf['Animal Type'] == 'Cat')]
-dogdf = originaldf[(originaldf['Animal Type'] == 'Dog')]
-birddf = originaldf[(originaldf['Animal Type'] == 'Bird')]
-otherdf = originaldf[(originaldf['Animal Type'] == 'Other')]
+originaldf = pd.read_csv('Austin_Animal_Center_Full.csv')
 
 # A utility method to create a tf.data dataset from a Pandas Dataframe
 # This method is entirely taken from the tf documentation
@@ -42,20 +36,14 @@ def show_batch(dataset):
 # This method almost certainly needs to be split into one method that sanitizes the data set, one that creates the model, and one that handles the predictions.
 
 
-def createModel(df):
-    # This method was created by following the following tf tutorials:
-    # https://www.tensorflow.org/tutorials/structured_data/feature_columns + https://www.tensorflow.org/tutorials/load_data/csv
-
-    # Set up a dictionary of categorical lists to help with categorical features later
-    CATEGORIES = {
-        # 'Sex_upon_Outcome': ['Intact Male', 'Intact Female', 'Spayed Female', 'Neutered Male', 'Unknown'],
-        'Sex_upon_Outcome': ['Male', 'Female'],
-        'Breed': [*df['Breed'].unique()],
-        'Color': [*df['Color'].unique()]
-    }
+def prepareDataFrame(df):
+    # Create a calculated length of stay column
+    # df['Datetime_of_Outcome'] = pd.to_datetime(df['Datetime_of_Outcome'])
+    # df['Datetime_of_Intake'] = pd.to_datetime(df['Datetime_of_Intake'])
+    # df["Length_of_Stay"] = df['Datetime_of_Outcome'] - df['Datetime_of_Intake']
 
     # Code to simplify age to a year value or a decimal value for under a year
-    df['Age upon Outcome'] = df['Age upon Outcome'].apply(
+    df['Age upon Intake'] = df['Age upon Intake'].apply(
         lambda age: float(age[0]) if 'year' in str(age) else(float(age[0])/12 if 'month' in str(age) else(float(age[0])/52.1429 if 'week' in str(age) else float(0))))
 
     # Remove entries with outcomes that don't make sense for our model
@@ -78,15 +66,32 @@ def createModel(df):
                           'Date of Birth', 'MonthYear', 'Outcome Subtype', 'Animal Type'])
 
     # These three describe statements are useful because they allow us to see the averages / frequencies / means for the all the adopted vs died / euthanized entries
-    # print(df[df['Outcome Type'] == 1].describe(include='all'))
-    # print(df[df['Outcome Type'] == 0].describe(include='all'))
-    # print(df['Outcome Type'].describe())
-    # input()
+    print(df[df['Outcome Type'] == 1].describe(include='all'))
+    print(df[df['Outcome Type'] == 0].describe(include='all'))
+    print(df['Outcome Type'].describe())
+    input()
 
     # Replace outcome type column with target column
     df['target'] = df.pop('Outcome Type')
     # Replace whitespace with underscores in column names
     df.columns = [c.replace(' ', '_') for c in df.columns]
+
+    return df
+
+
+def createModel(df):
+    # This method was created by following the following tf tutorials:
+    # https://www.tensorflow.org/tutorials/structured_data/feature_columns + https://www.tensorflow.org/tutorials/load_data/csv
+
+    # Set up a dictionary of categorical lists to help with categorical features later
+    CATEGORIES = {
+        # 'Sex_upon_Outcome': ['Intact Male', 'Intact Female', 'Spayed Female', 'Neutered Male', 'Unknown'],
+        'Sex_upon_Outcome': ['Male', 'Female'],
+        'Breed': [*df['Breed'].unique()],
+        'Color': [*df['Color'].unique()],
+        'Intake_Condition': [*df['Intake_Condition'].unique()],
+        'Intake_Type': [*df['Intake_Type'].unique()],
+    }
     # Split the dataframe into test, train, and validation sets
     train, test = train_test_split(df, test_size=0.2)
     train, val = train_test_split(train, test_size=0.2)
@@ -125,14 +130,17 @@ def createModel(df):
     model = tf.keras.Sequential([
         # Add our numerical and categorical layers
         feature_layer,
-        # Been playing around with the units and number of layers to try to build a better model
+        # Been playing around with the units and number of layers/dropouts to try to build a better model
         layers.Dense(128, activation='relu'),
+        # layers.Dropout(.1),
         layers.Dense(128, activation='relu'),
+        # layers.Dropout(.1),
         layers.Dense(128, activation='relu'),
+        # layers.Dropout(.1),
         layers.Dense(128, activation='relu'),
         # layers.Dense(128, activation='relu'),
-        # I don't think dropout will work since we are mostly using categorical data here, setting some values to 0 would only work for the age column
-        # layers.Dropout(.1),
+        # Add dropout to avoid overfitting
+        layers.Dropout(.1),
         layers.Dense(1)
     ])
 
@@ -185,7 +193,7 @@ def makePrediction(model, df):
     #imported = tf.saved_model.load("aacmlp")
     userPet = []
     userPet.append(input(
-        "Please enter the age of your animal in years, or decimal values for under a year: "))
+        "Please enter the age of your animal in years, or decimal values for ages under a year: "))
     userPet.append(input(
         f"{', '.join(map(str, df['Breed'].unique()))}, Please enter the breed of your animal which most closely matches one of the options listed above: "))
     userPet.append(input(
@@ -219,7 +227,9 @@ def main():
     userChoice = input(
         "Please pick one of the animal types to build a model for: [Cat, Dog, Bird, Other] ")
     if(userChoice in originaldf['Animal Type'].unique()):
-        createModel(originaldf[(originaldf['Animal Type'] == userChoice)])
+        preppeddf = prepareDataFrame(
+            originaldf[(originaldf['Animal Type'] == userChoice)])
+        createModel(preppeddf)
     else:
         print("Your entry did not match any of the choices, goodbye")
     # createVisualizations(catdf)
