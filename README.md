@@ -12,7 +12,7 @@ Please note that I'm still relatively new to the data science world myself and c
 * ~~Is sex upon outcome a good indicator? It may be the only factor which is used because the Austin Animal Center might offer spay and neuter services upon adoption, which would mean an adopted pet would almost always be spayed / neutered and a died / euthanized pet would almost never be. I am considering removing it from the feature column.~~ 
     - After some deliberation, I decided to remove the intact/neutered subtext from the column. It was too strong an indicator of the outcome type. I'm unsure why exactly almost all fixed animals are adopted and intact animals are euthanized, but I think it's more interesting to examine the other traits. I will reach out to the Austin Animal Care Center and ask if all adopted animals are required to be fixed.
 	- Contacted staff at the Austin Animal Center, who informed me that all animals are required to be fixed upon adoption, thus it's good we dropped the prefix as intact would always indicate a deceased animal.
-
+* There are outcomes that don't have matching intakes and this is causing issues with how we join the two csv files. If an animal is admitted to the care center more than once, the current utility script will match the non extra outcome with the wrong intake and it will generate an erroneous negative timedelta. We are going to have to add a few lines to remove outcomes without intakes.
 ## Features to add
 - [x] Make a utility script that combines the two datasets
 - [ ] Use the new combined dataset to build a better model
@@ -29,6 +29,6 @@ Please note that I'm still relatively new to the data science world myself and c
 * https://www.tensorflow.org/tutorials/load_data/pandas_dataframe
 
 ## Data source:
-https://catalog.data.gov/dataset/austin-animal-center-intakes
-https://catalog.data.gov/dataset/austin-animal-center-outcomes-version-1-demo
-These datasets are updated frequently, datasets last pulled 8/24/2020
+* https://catalog.data.gov/dataset/austin-animal-center-intakes
+* https://catalog.data.gov/dataset/austin-animal-center-outcomes-version-1-demo
+* These datasets are updated frequently, datasets last pulled 8/24/2020
