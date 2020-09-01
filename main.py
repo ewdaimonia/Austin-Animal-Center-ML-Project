@@ -37,14 +37,12 @@ def show_batch(dataset):
 
 
 def prepareDataFrame(df):
-    # Create a calculated length of stay column
-    # df['Datetime_of_Outcome'] = pd.to_datetime(df['Datetime_of_Outcome'])
-    # df['Datetime_of_Intake'] = pd.to_datetime(df['Datetime_of_Intake'])
-    # df["Length_of_Stay"] = df['Datetime_of_Outcome'] - df['Datetime_of_Intake']
-
     # Code to simplify age to a year value or a decimal value for under a year
     df['Age upon Intake'] = df['Age upon Intake'].apply(
-        lambda age: float(age[0]) if 'year' in str(age) else(float(age[0])/12 if 'month' in str(age) else(float(age[0])/52.1429 if 'week' in str(age) else float(0))))
+        lambda age: float(age.split()[0]) if 'year' in str(age) else(float(age.split()[0])/12 if 'month' in str(age) else(float(age.split()[0])/52.1429 if 'week' in str(age) else float(0))))
+
+    # Code to change los to float instead of strings
+    df['Length_of_Stay'] = df['Length_of_Stay'].apply(lambda los: float(los))
 
     # Remove entries with outcomes that don't make sense for our model
     # Also remove incomplete data such as NULL or Unknown entries for sex and age
@@ -62,8 +60,8 @@ def prepareDataFrame(df):
         lambda sex: sex.split()[1] if isinstance(sex, str) else 'Male')
 
     # Drop unecessary columns
-    df = df.drop(columns=['Animal ID', 'Name', 'DateTime',
-                          'Date of Birth', 'MonthYear', 'Outcome Subtype', 'Animal Type'])
+    df = df.drop(columns=['Animal ID', 'Name', 'Datetime_of_Outcome', 'Datetime_of_Intake',
+                          'Date of Birth', 'MonthYear_of_Outcome', 'MonthYear_of_Intake', 'Outcome Subtype', 'Animal Type', 'Found Location', 'Age upon Outcome'])
 
     # These three describe statements are useful because they allow us to see the averages / frequencies / means for the all the adopted vs died / euthanized entries
     print(df[df['Outcome Type'] == 1].describe(include='all'))
@@ -105,7 +103,9 @@ def createModel(df):
 
     # Add numeric cols
     feature_columns.append(
-        feature_column.numeric_column('Age_upon_Outcome'))
+        feature_column.numeric_column('Age_upon_Intake', dtype=tf.dtypes.float64))
+    feature_columns.append(
+        feature_column.numeric_column('Length_of_Stay', dtype=tf.dtypes.float64))
 
     # Declare a temporary categorical columns list which will be iterated through and added to our feature columns
     categorical_columns = []
@@ -119,6 +119,8 @@ def createModel(df):
 
     # Create the feature layer which will include our feature columns and will help us build our model
     feature_layer = tf.keras.layers.DenseFeatures(feature_columns)
+    print(df.dtypes)
+    input()
 
     # Set batch size and use the tf df to dataset utility function to create datasets we can train our model on
     batch_size = 32
@@ -174,19 +176,25 @@ def createModel(df):
         prediction = tf.sigmoid(prediction).numpy()
         print("Gender:" + str(list(test_ds.as_numpy_iterator())
                               [0][0]['Sex_upon_Outcome'][count]))
-        print("Age:" + str(list(test_ds.as_numpy_iterator())
-                           [0][0]['Age_upon_Outcome'][count]))
+        print("Age(years):" + str(list(test_ds.as_numpy_iterator())
+                                  [0][0]['Age_upon_Intake'][count]))
         print("Breed:" + str(list(test_ds.as_numpy_iterator())
                              [0][0]['Breed'][count]))
         print("Color:" + str(list(test_ds.as_numpy_iterator())
                              [0][0]['Color'][count]))
+        print("Length of Stay(days):" + str(list(test_ds.as_numpy_iterator())
+                                            [0][0]['Length_of_Stay'][count]))
+        print("Intake Condition:" + str(list(test_ds.as_numpy_iterator())
+                                        [0][0]['Intake_Condition'][count]))
+        print("Intake Type:" + str(list(test_ds.as_numpy_iterator())
+                                   [0][0]['Intake_Type'][count]))
         print("Predicted survival: {:.2%}".format(prediction[0]),
               " | Actual outcome: ",
               ("SURVIVED" if bool(survived) else "DIED"))
         print()
         count += 1
 
-    makePrediction(model, df)
+    return(model, df)
 
 
 def makePrediction(model, df):
@@ -200,27 +208,37 @@ def makePrediction(model, df):
         f"{df['Color'].unique()} Please enter the color of your animal which most closely matches one of the options listed above: "))
     userPet.append(input(
         "Please enter the gender of your animal [Male or Female]: "))
-    singleDf = pd.DataFrame([{'Age_upon_Outcome': float(userPet[0]), 'Breed': str(userPet[1]),
-                              'Color': str(userPet[2]), 'Sex_upon_Outcome': str(userPet[3]), 'target': float(0)}])
-    singleDs = df_to_dataset(singleDf, batch_size=1)
-    singlePrediction = model.predict(singleDs)
-    singlePrediction = tf.sigmoid(singlePrediction[0]).numpy()
-    print("Predicted survival: {:.2%}".format(singlePrediction[0]))
+    userDict = {'Age_upon_Intake': float(userPet[0]), 'Breed': str(userPet[1]),
+                'Color': str(userPet[2]), 'Sex_upon_Outcome': str(userPet[3]), 'Intake_Type': 'Stray', 'Intake_Condition': 'Normal', 'Length_of_Stay': 0, 'target': float(0)}
+    # userList = [(userDict['Length_of_Stay'] := i) for i in range(30)]
+    userList = []
+    for i in range(31):
+        userList.append(userDict.copy())
+        userList[i]['Length_of_Stay'] = float(i)
+    userDf = pd.DataFrame(userList)
 
-# This is a method that I'd like to flesh out a bit and add a few more visualiztions for examples of what can be done with data
+    for condition in ['Normal', 'Sick', 'Injured', 'Nursing', 'Aged']:
+        userDf['Intake_Condition'] = userDf['Intake_Condition'].apply(
+            lambda x: condition)
+        userDs = df_to_dataset(userDf.copy(), batch_size=31)
+        predictions = model.predict(userDs)
+        predictionDf = pd.DataFrame()
+        # columns=['Days at Shelter', 'Predicted Survival'])
+        for i, prediction in enumerate(predictions[:30]):
+            # prediction = tf.keras.activations.hard_sigmoid(prediction)  # .numpy()
+            prediction = tf.sigmoid(prediction).numpy()
+            print("Predicted survival ({} days at shelter): {:.2%}".format(
+                i, prediction[0]))
+            predictionDf = predictionDf.append(
+                {'Days at Shelter': i, 'Predicted Survival': prediction[0]}, ignore_index=True)
+        createVisualizations(predictionDf, condition, userPet)
 
 
-def createVisualizations(df):
-    df = df[(df['Outcome Type'] != 'Transfer') & (
-        df['Outcome Type'] != 'Return to Owner')]
-    df.drop
-    fig = plt.figure()
-    ax = plt.axes()
-    ax.set(xlim=(0, 6), ylim=(0, 21000),
-           xlabel='Outcome Type', ylabel='Frequency',
-           title='First Visualization')
-
-    plt.hist(df['Outcome Type'])
+def createVisualizations(df, condition, userPet):
+    fig = df.plot(x='Days at Shelter', y='Predicted Survival',
+                  title=condition).get_figure()
+    fig.savefig(
+        f'./graphs/{condition + str(userPet).replace("/", "")}.pdf')
 
 
 def main():
@@ -229,7 +247,7 @@ def main():
     if(userChoice in originaldf['Animal Type'].unique()):
         preppeddf = prepareDataFrame(
             originaldf[(originaldf['Animal Type'] == userChoice)])
-        createModel(preppeddf)
+        makePrediction(*createModel(preppeddf))
     else:
         print("Your entry did not match any of the choices, goodbye")
     # createVisualizations(catdf)
